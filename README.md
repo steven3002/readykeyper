@@ -1,36 +1,38 @@
 # readykeyper
 
-A readiness check for the keypers of Shutter's Permanent Private Voting suite ([shutter-network/shutter-governance-protocol](https://github.com/shutter-network/shutter-governance-protocol)). It finds what `/health` misses (a lost key share, a wrong coordinator identity, clock skew, a bad restore) before a keyper starts, restarts or rejoins a set that secures live votes.
+Readiness checks for the keypers of Shutter's Permanent Private Voting suite ([shutter-network/shutter-governance-protocol](https://github.com/shutter-network/shutter-governance-protocol)).
 
-> **Status: in development.** The work is split into the milestones below. Each one is defined in its own issue, and each ends with a demo.
+> **Status: in development.** The work is split into the milestones below, each defined in its own issue.
 
-## Why
+## The problem
 
-I set up the suite's keypers on my own machine, following its docs. I found that a keyper can answer `/health` with `200` and still break a vote:
+A keyper's `/health` endpoint says whether the process is up. It does not say whether the keyper can do its part in a vote. Several failures pass `/health` and only show up when key generation or the vote count fails:
 
-- **A keyper restarts without its key share.** It still reports healthy, and the vote count is abandoned later.
-- **One keyper of three loses its share.** The vote still counts on the other two, and nobody notices until a second one goes.
-- **The coordinator identity is wrong.** Nothing complains until key generation fails.
-- **The clock is about five minutes off.** The keyper never finishes bootstrapping.
+- **A keyper restarts without its key share.** It keeps answering `/health` with `200`, and the vote count is abandoned later.
+- **One keyper of three loses its share.** The vote still completes on the remaining shares, so the lost redundancy goes unnoticed until another keyper fails.
+- **The coordinator identity is wrong.** Nothing reports it until key generation fails.
+- **The clock is about five minutes off.** The keyper does not finish bootstrapping.
 
-An operator finds out when a vote fails. readykeyper is meant to catch these before that.
+Operators learn about these when a vote fails.
 
-## What it checks
+## The solution
 
-**Default mode** needs no secrets. It checks:
-- the keyper's own status;
-- its announced key and address, against Shutter's public API;
-- its clock;
-- the elections it holds.
+readykeyper checks the conditions a vote depends on before a keyper starts, restarts or rejoins a set. It reports each condition with a clear result, and gives an exit code that scripts and monitoring can act on.
 
-**Deep mode** runs inside the keyper's container. It also checks the coordinator identity, the stored state, and the key share for each election.
+## Features
 
-**Exit codes:**
-- `0` ready;
-- `1` not ready;
-- `2` needs attention.
-
-**A restore test** proves that a restored keyper still holds the share the vote count needs.
+- **Default mode, no secrets needed.** Run it from outside the keyper. It checks:
+  - the keyper's status;
+  - its announced key and address, against the deployment's public API;
+  - its clock;
+  - the elections it holds.
+- **Deep mode.** Run it inside the keyper's container with `--deep`. It also checks the coordinator identity, the stored state, and the key share for each election.
+- **Restore test.** Proves that a restored keyper still holds the share the vote count needs, and that a bad restore is caught: an empty folder, a backup from before key generation, or a missing secrets file.
+- **Read-only.** It writes nothing, prints no key, share or token, and connects only to the keyper and the public API.
+- **Exit codes:**
+  - `0` ready;
+  - `1` not ready;
+  - `2` needs attention.
 
 ## Milestones
 
